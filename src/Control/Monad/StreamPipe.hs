@@ -114,7 +114,7 @@ gen1 = forever $ yield 1
 
 -- | InputPipe is a reinterpretation of Pipe and doesn't have a monad instance.
 -- But it has an interesting applicative instance.
--- It is essentially an infinite string, where
+-- It is an infinite stream, which can throw an exception.
 newtype InputPipe e o = InputPipe {
                   runInputPipe :: Pipe () o e
           }
