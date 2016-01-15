@@ -111,18 +111,22 @@ pairFinder xs = fst $ runPipe'' pairFinder' $ join [[x,y]| x <- xs, y <- xs]
 -- | Hello world of generators
 gen1 :: Pipe t Int s
 gen1 = forever $ yield 1
-newtype InputPipe i e o = InputPipe {
-                  runInputPipe :: Pipe i o e
+
+-- | InputPipe is a reinterpretation of Pipe and doesn't have a monad instance.
+-- But it has an interesting applicative instance.
+-- It is essentially an infinite string, where
+newtype InputPipe e o = InputPipe {
+                  runInputPipe :: Pipe () o e
           }
 
-instance Functor (InputPipe i e) where
+instance Functor (InputPipe e) where
     fmap f m = InputPipe $ fmap' f (runInputPipe m)
         where fmap' f (Pure a) = Pure a
               fmap' q (Input f) = Input $ \i ->  runInputPipe $fmap q $ InputPipe (f i)
               fmap' f (Yield g) = Yield $ \i -> let (o, p) = g i
                                                 in (f o, runInputPipe $ fmap f (InputPipe p))
 
-instance Applicative (InputPipe i e) where
+instance Applicative (InputPipe e) where
          pure a = InputPipe $ Yield (\() -> (a, runInputPipe $ pure a))
          (<*>) f g = InputPipe $ worker (runInputPipe f) (runInputPipe g)
                 where worker (Input f) (Input g) = Input $ \i -> runInputPipe $ InputPipe ( f i) <*> InputPipe ( g i)
