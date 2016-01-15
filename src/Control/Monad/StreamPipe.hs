@@ -115,25 +115,54 @@ gen1 = forever $ yield 1
 -- | InputPipe is a reinterpretation of Pipe and doesn't have a monad instance.
 -- But it has an interesting applicative instance.
 -- It is an infinite stream, which can throw an exception.
-newtype InputPipe e o = InputPipe {
-                  runInputPipe :: Pipe () o e
+-- It is possible to change an inputPipe into a Pipe. This will result in a radical different behaviour of the Pipe.
+
+newtype InputPipe i e o = InputPipe {
+                  runInputPipe :: Pipe i o e
           }
 
-instance Functor (InputPipe e) where
+instance Functor (InputPipe i e) where
     fmap f m = InputPipe $ fmap' f (runInputPipe m)
         where fmap' f (Pure a) = Pure a
               fmap' q (Input f) = Input $ \i ->  runInputPipe $fmap q $ InputPipe (f i)
               fmap' f (Yield g) = Yield $ \i -> let (o, p) = g i
                                                 in (f o, runInputPipe $ fmap f (InputPipe p))
 
-instance Applicative (InputPipe e) where
+instance Applicative (InputPipe i e) where
          pure a = InputPipe $ Yield (\() -> (a, runInputPipe $ pure a))
          (<*>) f g = InputPipe $ worker (runInputPipe f) (runInputPipe g)
                 where worker (Input f) (Input g) = Input $ \i -> runInputPipe $ InputPipe ( f i) <*> InputPipe ( g i)
+                      -- Pure works like an exception, stopping the computation
                       worker _ (Pure g) =  Pure g
                       worker (Pure a) _ = Pure a
+                      -- Yield runs the input
                       worker (Yield f)  (Yield g) = Yield $ \i -> let (f', pf') = f i
                                                                       (a', pf'') = g i
                                                                   in (f' a', runInputPipe $ InputPipe pf' <*> InputPipe pf'')
                       worker (Input f) q = Input $ \i -> runInputPipe $ InputPipe (f i) <*> InputPipe q
                       worker q (Input g) =  Input $ \i -> runInputPipe $ InputPipe q <*>  InputPipe (g i)
+
+
+-- | This read one item from the input and turn it into an infinite stream
+streamInput :: InputPipe i e i
+streamInput = InputPipe $ Input $ \i -> runInputPipe $ pure i
+
+-- | A bit more usefull one, reads the input and yield it again, repeating this process over and over again
+yieldInput :: InputPipe i e i
+yieldInput  = InputPipe $ Input $ \i -> Yield $ \o ->  (i, runInputPipe (yieldInput) )
+
+-- | Makes a finite stream from a finite list
+inject :: [o] -> InputPipe i () o
+inject [] = InputPipe $ Pure  ()
+inject (x:xs) = InputPipe $ Yield $ \_ -> (x, runInputPipe $ inject xs)
+
+-- | Makes an infinite stream from a finite list
+cycleStream :: [o] -> InputPipe i e o
+cycleStream xs = worker xs xs
+        where worker [] ns = worker ns ns
+              worker (x:xs) ns = InputPipe $ Yield $ \_ -> (x, runInputPipe $ worker xs ns)
+
+except :: e -> InputPipe i e o
+except e = InputPipe (Pure e)
+
+testStream = (+) <$> yieldInput <*> yieldInput
