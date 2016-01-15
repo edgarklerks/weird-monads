@@ -4,6 +4,8 @@ module Control.Monad.StreamPipe where
 import Control.Monad
 import Control.Applicative
 
+-- | semi coroutines as found in python
+-- It has another applicative and functor, which behave like a zip list.
 data Pipe i o a where
      Input :: (i -> Pipe i o a) -> Pipe i o a
      Yield :: (() -> (o, Pipe i o a)) -> Pipe i o a
@@ -162,7 +164,9 @@ cycleStream xs = worker xs xs
         where worker [] ns = worker ns ns
               worker (x:xs) ns = InputPipe $ Yield $ \_ -> (x, runInputPipe $ worker xs ns)
 
+iterateStream :: (o -> o) -> o -> InputPipe i e o
+iterateStream f s = InputPipe $ Yield $ \_ -> let s' = f s
+                                           in (s', runInputPipe $ iterateStream f s')
+
 except :: e -> InputPipe i e o
 except e = InputPipe (Pure e)
-
-testStream = (+) <$> yieldInput <*> yieldInput
