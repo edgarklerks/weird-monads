@@ -170,3 +170,13 @@ iterateStream f s = InputPipe $ Yield $ \_ -> let s' = f s
 
 except :: e -> InputPipe i e o
 except e = InputPipe (Pure e)
+
+
+
+-- | Example mixing both
+
+example = do
+
+             x <- runInputPipe $ (*) <$> iterateStream (\x -> (x * x - (x `div` 2))) 3 <*> yieldInput
+             yield (2)
+             yield (2)
